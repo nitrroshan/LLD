@@ -116,6 +116,33 @@ House house = new HouseBuilder()
 
 This reads like a sentence. Compare with the telescoping constructor — night and day.
 
+The **C++** builder returns **`*this` by reference** so the chain mutates one builder:
+
+```cpp
+class HouseBuilder {
+    int rooms_ = 0, floors_ = 0;
+    bool garage_ = false, pool_ = false;
+    std::string roof_ = "flat";
+public:
+    HouseBuilder& rooms(int n)             { rooms_ = n;  return *this; }   // return *this to chain
+    HouseBuilder& floors(int n)            { floors_ = n; return *this; }
+    HouseBuilder& garage()                 { garage_ = true; return *this; }
+    HouseBuilder& pool()                   { pool_ = true; return *this; }
+    HouseBuilder& roofType(std::string t)  { roof_ = std::move(t); return *this; }
+
+    House build() const { return House(rooms_, floors_, garage_, pool_, roof_); }
+};
+
+// Same fluent call site as Java:
+House house = HouseBuilder()
+    .rooms(4)
+    .floors(2)
+    .garage()
+    .pool()
+    .roofType("tile")
+    .build();
+```
+
 ---
 
 ## The Director: Optional but Powerful
@@ -134,6 +161,27 @@ class HouseDirector {
     }
 }
 ```
+
+The **C++** director just takes the builder by reference and drives the same steps:
+
+```cpp
+class HouseDirector {
+public:
+    House buildLuxuryHouse(HouseBuilder& b) const {
+        return b.rooms(6).floors(3).garage().pool().roofType("slate").build();
+    }
+    House buildSimpleHouse(HouseBuilder& b) const {
+        return b.rooms(2).floors(1).roofType("shingle").build();
+    }
+};
+```
+
+### C++ specifics
+
+- **Each setter returns `*this` by reference** (`HouseBuilder&`), not by value — returning a copy would chain against throwaway copies and lose your settings.
+- **`build()` returns the product by value** (`House`). That's cheap in C++ thanks to move semantics / RVO — no heap allocation needed for a value object. Use `std::unique_ptr<House>` only if the product is polymorphic (a base with virtual methods).
+- **True immutability = `const` data members** set once in the product's constructor initializer list, with the constructor kept `private` and the builder made a `friend`. Then a `House` genuinely can't be mutated after `build()`.
+- Unlike Java, C++ has **default arguments** for the simple cases (`House(int rooms, int floors, bool garage = false)`), so reach for a full Builder only when there are many optional fields — the same KISS/YAGNI judgement.
 
 Useful when:
 - You have **recurring configurations** (luxury, budget, standard)

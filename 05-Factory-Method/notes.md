@@ -27,6 +27,21 @@ transport.deliver();
 
 **Violations:** OCP (must modify to add types), DIP (depends on concretions), SRP (client knows creation logic).
 
+The **C++** version has the same problem — and the same smell:
+
+```cpp
+// BAD: client coupled to every concrete type
+std::unique_ptr<Transport> transport;
+if (type == "truck") {
+    transport = std::make_unique<Truck>();
+} else if (type == "ship") {
+    transport = std::make_unique<Ship>();
+} else if (type == "airplane") {
+    transport = std::make_unique<Airplane>();   // every new type = edit this code
+}
+transport->deliver();
+```
+
 ---
 
 ## The Solution
@@ -112,6 +127,56 @@ abstract class LogisticsFactory {
     }
 }
 ```
+
+The **C++** creator — note it returns a `std::unique_ptr<Transport>` (the factory hands over *ownership*):
+
+```cpp
+// Creator (abstract) — factory method + business logic
+class LogisticsFactory {
+public:
+    virtual ~LogisticsFactory() = default;
+    virtual std::unique_ptr<Transport> createTransport() const = 0;   // subclass decides
+
+    void planDelivery() const {
+        auto transport = createTransport();   // works with the base type, never sees the concrete class
+        transport->deliver();
+    }
+};
+
+// Concrete Creators
+class RoadLogistics : public LogisticsFactory {
+public:
+    std::unique_ptr<Transport> createTransport() const override {
+        return std::make_unique<Truck>();
+    }
+};
+
+class SeaLogistics : public LogisticsFactory {
+public:
+    std::unique_ptr<Transport> createTransport() const override {
+        return std::make_unique<Ship>();
+    }
+};
+```
+
+where the product is a pure-virtual base:
+
+```cpp
+struct Transport {
+    virtual ~Transport() = default;
+    virtual void deliver() const = 0;
+};
+
+struct Truck : Transport { void deliver() const override { std::cout << "By land in a truck.\n"; } };
+struct Ship  : Transport { void deliver() const override { std::cout << "By sea in a ship.\n"; } };
+```
+
+### C++ specifics
+
+- **Return `std::unique_ptr<Product>`, not a raw `Product*`.** The factory *creates and hands over ownership* — `unique_ptr` makes that explicit and leak-free (whoever receives it owns it). Returning a raw pointer forces the caller to remember to `delete`.
+- **The product base needs a `virtual` destructor** (`virtual ~Transport() = default;`) — the client deletes through a `Transport*`/`unique_ptr<Transport>`, so without it the concrete part leaks (undefined behavior).
+- **`createTransport()` must be `virtual`** — that's what makes the subclass's version get called (Java methods are virtual by default; in C++ you say so).
+- Java uses `new Truck()`; C++ uses **`std::make_unique<Truck>()`** — same idea, but it also allocates safely and returns the owning pointer in one step.
 
 ---
 

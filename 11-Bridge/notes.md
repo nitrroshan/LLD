@@ -146,6 +146,55 @@ class Remote {
 
 The remote doesn't know if it's controlling a TV or Radio. The device doesn't know if it's being controlled by a basic or advanced remote. **They vary independently.**
 
+The **C++** version — the bridge is a `unique_ptr<Device>` member the abstraction owns:
+
+```cpp
+// Implementation side
+struct Device {
+    virtual ~Device() = default;
+    virtual bool is_enabled() const = 0;
+    virtual void enable() = 0;
+    virtual void disable() = 0;
+    virtual int  volume() const = 0;
+    virtual void set_volume(int v) = 0;
+};
+
+class Tv    : public Device { /* ... */ };
+class Radio : public Device { /* ... */ };
+
+// Abstraction side — holds the bridge to an implementation
+class Remote {
+protected:
+    std::unique_ptr<Device> device_;                 // the bridge (owns the device)
+public:
+    explicit Remote(std::unique_ptr<Device> device) : device_(std::move(device)) {}
+    virtual ~Remote() = default;
+
+    void toggle_power() {
+        if (device_->is_enabled()) device_->disable();   // delegate to implementation
+        else                       device_->enable();
+    }
+    void volume_up() { device_->set_volume(device_->volume() + 10); }
+};
+
+// Refined abstraction — more features, same bridge
+class AdvancedRemote : public Remote {
+public:
+    using Remote::Remote;                            // inherit the base constructor
+    void mute() { device_->set_volume(0); }
+};
+
+// Client composes the two INDEPENDENT hierarchies:
+AdvancedRemote remote(std::make_unique<Tv>());
+```
+
+### C++ specifics
+
+- **The bridge is a member `std::unique_ptr<Device>`** — the abstraction owns its implementation. Use a raw pointer/reference instead if the device is external or shared.
+- **Both hierarchies are pure-virtual bases with `virtual` destructors** — `Device` and `Remote` are each deleted through base pointers.
+- **`using Remote::Remote;`** inherits the base constructor so the refined abstraction doesn't re-declare it.
+- Under the hood this is the same "depend on an interface pointer" wiring as DIP/Strategy — **Bridge is composition connecting two hierarchies**, which is why it beats the M×N inheritance explosion.
+
 ---
 
 ## Without Bridge vs With Bridge

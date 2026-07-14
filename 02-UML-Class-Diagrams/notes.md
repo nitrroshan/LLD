@@ -134,6 +134,23 @@ A class **uses** another in a method parameter or local variable, but doesn't st
 
 ---
 
+## Relationships in Code (Java vs C++)
+
+This is where C++ gets interesting: **the UML relationship directly chooses your C++ ownership type.** Java blurs this because the garbage collector owns everything; in C++ you must say who owns what.
+
+| Relationship | Java | C++ (the ownership idiom) |
+|--------------|------|---------------------------|
+| **Association** (stores a ref) | field of that type | non-owning `T*` or `T&` |
+| **Aggregation** (has-a, weak) | field holding an externally-created object | non-owning `T*`, or `std::shared_ptr<T>` if truly shared |
+| **Composition** (has-a, owns) | field created with `new` inside; GC frees it | **`std::unique_ptr<T>`** or a by-value `T` member |
+| **Dependency** (uses) | method parameter / local | method parameter / local (`const T&`) |
+| **Inheritance** (is-a) | `class B extends A` | `class B : public A` |
+| **Realization** (implements) | `class B implements I` | `class B : public I` (all-pure-virtual base) |
+
+> Rule of thumb in C++: **composition = `unique_ptr` (or value member)** because the owner controls the lifetime; **aggregation/association = raw pointer or reference** because someone *else* owns the object; **dependency = just a parameter**.
+
+---
+
 ## Multiplicity
 
 Shows how many objects participate in a relationship:
@@ -277,6 +294,78 @@ classDiagram
 - `Library *-- Book` → Composition: Library owns books. Delete library → books gone.
 - `Book --> Author` → Association: Book knows its author. Author exists independently.
 - `Member ..> Book` → Dependency: Member borrows a book (uses it, doesn't own it).
+
+**In Java** — every relationship is just a reference; the GC handles lifetimes:
+
+```java
+class Author {
+    private String name, email;
+    Author(String name, String email) { this.name = name; this.email = email; }
+    String getName() { return name; }
+}
+
+class Book {
+    private String title, isbn;
+    private Author author;                       // association — knows an Author
+    Book(String title, String isbn, Author author) {
+        this.title = title; this.isbn = isbn; this.author = author;
+    }
+    String getTitle() { return title; }
+}
+
+class Library {
+    private String name;
+    private List<Book> books = new ArrayList<>(); // composition — owns its Books
+    void addBook(Book b) { books.add(b); }
+}
+
+class Member {
+    private String name;
+    void borrow(Book book) {                      // dependency — uses a Book, doesn't store it
+        System.out.println(name + " borrowed " + book.getTitle());
+    }
+}
+```
+
+**In C++** — notice how each relationship picks a different ownership type:
+
+```cpp
+class Author {
+    std::string name, email;
+public:
+    Author(std::string name, std::string email)
+        : name(std::move(name)), email(std::move(email)) {}
+    const std::string& get_name() const { return name; }
+};
+
+class Book {
+    std::string title, isbn;
+    Author* author;                              // association — NON-owning pointer (Author lives elsewhere)
+public:
+    Book(std::string title, std::string isbn, Author* author)
+        : title(std::move(title)), isbn(std::move(isbn)), author(author) {}
+    const std::string& get_title() const { return title; }
+};
+
+class Library {
+    std::string name;
+    std::vector<std::unique_ptr<Book>> books;    // composition — Library OWNS the Books
+public:
+    void add_book(std::unique_ptr<Book> b) { books.push_back(std::move(b)); }
+};
+
+class Member {
+    std::string name;
+public:
+    void borrow(const Book& book) {              // dependency — uses a Book by ref, doesn't store it
+        std::cout << name << " borrowed " << book.get_title() << "\n";
+    }
+};
+```
+
+- **Composition** (`Library` → `Book`) became `unique_ptr` — the library owns the books' lifetime.
+- **Association** (`Book` → `Author`) became a raw `Author*` — the book *knows* the author but doesn't own it.
+- **Dependency** (`Member` → `Book`) became a `const Book&` parameter — used, never stored.
 
 ---
 

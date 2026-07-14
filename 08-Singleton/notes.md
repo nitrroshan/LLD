@@ -206,6 +206,42 @@ public enum EnumSingleton {
 
 ---
 
+### 7. The C++ way: Meyer's Singleton (Recommended for C++)
+
+C++ has no `enum`-singleton or Bill Pugh idiom — instead the canonical form is a **local `static`** inside the accessor. Since C++11, the standard *guarantees* this initialization is thread-safe and happens exactly once, so it's the C++ equivalent of Bill Pugh: lazy **and** thread-safe with zero locking code you write yourself.
+
+```cpp
+class ConfigManager {
+    std::map<std::string, std::string> properties_;
+    ConfigManager() { /* load config once */ }          // private constructor
+
+public:
+    ConfigManager(const ConfigManager&) = delete;        // no copying
+    ConfigManager& operator=(const ConfigManager&) = delete;
+
+    static ConfigManager& instance() {
+        static ConfigManager instance;   // created on first call, thread-safe (C++11 §6.7)
+        return instance;
+    }
+
+    std::string get(const std::string& key) { return properties_[key]; }
+};
+
+// Usage — always a reference, never a copy:
+ConfigManager::instance().get("db.host");
+```
+
+**Why this is the go-to:** the compiler inserts the double-checked locking + memory barriers for you (see the deep-dive below), so you don't write `volatile`, `synchronized`, or DCL by hand.
+
+### C++ specifics
+
+- **Return by reference** (`ConfigManager&`), never by value \u2014 a by-value return would copy the singleton (defeating the point) and slice if it's polymorphic.
+- **`= delete` the copy constructor and copy assignment** \u2014 this is how C++ enforces "only one instance"; there's no `private` clone to worry about like Java.
+- **No GC** \u2014 the local static is destroyed automatically at program exit, in reverse order of construction. Watch the *static destruction order* if one singleton uses another during shutdown.
+- **C++ `volatile` is NOT Java `volatile`** \u2014 it does *not* provide thread-safety or ordering. Use `std::atomic` if you ever hand-roll DCL (but prefer Meyer's and don't).
+
+---
+
 ## Breaking Singleton (and Prevention)
 
 | Attack | How it breaks | Prevention |

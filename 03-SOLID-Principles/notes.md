@@ -55,6 +55,30 @@ class TaxCalculator {
 
 Now if tax rules change, only `TaxCalculator` changes. Everything else stays untouched.
 
+**Same split in C++** — data in a `struct`, each responsibility its own class:
+
+```cpp
+struct Employee {                 // just holds data (struct = public members)
+    std::string name;
+    double salary;
+};
+
+class EmployeeRepository {
+public:
+    void save(const Employee& emp) { /* database logic */ }
+};
+
+class PaySlipGenerator {
+public:
+    std::string generate(const Employee& emp) { /* formatting */ return {}; }
+};
+
+class TaxCalculator {
+public:
+    double calculate(const Employee& emp) { /* tax rules */ return 0.0; }
+};
+```
+
 ### How to spot SRP violations
 - Class name contains "And" (e.g., `ReaderAndWriter`)
 - Class has methods that don't relate to each other
@@ -114,6 +138,36 @@ class AreaCalculator {
         return shape.area();  // works for ALL shapes, past and future
     }
 }
+```
+
+**In C++** the extension point is a pure virtual method:
+
+```cpp
+class Shape {
+public:
+    virtual ~Shape() = default;
+    virtual double area() const = 0;      // the extension point
+};
+
+class Circle : public Shape {
+    double radius;
+public:
+    explicit Circle(double r) : radius(r) {}
+    double area() const override { return 3.14159 * radius * radius; }
+};
+
+class Rectangle : public Shape {
+    double width, height;
+public:
+    Rectangle(double w, double h) : width(w), height(h) {}
+    double area() const override { return width * height; }
+};
+
+// Adding Triangle? Just a new class implementing Shape — nothing else changes.
+class AreaCalculator {
+public:
+    double calculate(const Shape& shape) const { return shape.area(); }  // by reference, no slicing
+};
 ```
 
 ### Key insight
@@ -176,6 +230,30 @@ class Square implements Shape {
     Square(int s) { this.side = s; }
     public int area() { return side * side; }
 }
+```
+
+**C++** — same fix, two independent implementations of a common base:
+
+```cpp
+class Shape {
+public:
+    virtual ~Shape() = default;
+    virtual int area() const = 0;
+};
+
+class Rectangle : public Shape {
+    int width, height;
+public:
+    Rectangle(int w, int h) : width(w), height(h) {}
+    int area() const override { return width * height; }
+};
+
+class Square : public Shape {
+    int side;
+public:
+    explicit Square(int s) : side(s) {}
+    int area() const override { return side * side; }
+};
 ```
 
 ### How to spot LSP violations
@@ -242,6 +320,42 @@ class Robot implements Workable {
 }
 ```
 
+**C++** — small pure-virtual bases; a class inherits only the ones it needs:
+
+```cpp
+class Workable {
+public:
+    virtual ~Workable() = default;
+    virtual void work() = 0;
+};
+
+class Feedable {
+public:
+    virtual ~Feedable() = default;
+    virtual void eat() = 0;
+    virtual void sleep() = 0;
+};
+
+class Collaboratable {
+public:
+    virtual ~Collaboratable() = default;
+    virtual void attend_meeting() = 0;
+};
+
+class HumanWorker : public Workable, public Feedable, public Collaboratable {
+public:
+    void work() override {}
+    void eat() override {}
+    void sleep() override {}
+    void attend_meeting() override {}
+};
+
+class Robot : public Workable {    // implements ONLY what it needs
+public:
+    void work() override {}
+};
+```
+
 ### Rule of thumb
 If you see empty method implementations or `UnsupportedOperationException` in a class, you probably have a fat interface that needs splitting.
 
@@ -303,6 +417,41 @@ class NotificationService {
 NotificationService emailNotifier = new NotificationService(new EmailSender());
 NotificationService smsNotifier = new NotificationService(new SmsSender());
 ```
+
+**C++** — the abstraction is a pure-virtual base; inject the implementation:
+
+```cpp
+class MessageSender {
+public:
+    virtual ~MessageSender() = default;
+    virtual void send(const std::string& message) = 0;
+};
+
+class EmailSender : public MessageSender {
+public:
+    void send(const std::string& message) override { std::cout << "Email: " << message << "\n"; }
+};
+
+class SmsSender : public MessageSender {
+public:
+    void send(const std::string& message) override { std::cout << "SMS: " << message << "\n"; }
+};
+
+class NotificationService {
+    MessageSender& sender;                        // depends on the abstraction, not a concrete class
+public:
+    explicit NotificationService(MessageSender& sender) : sender(sender) {}   // injected
+    void notify(const std::string& message) { sender.send(message); }
+};
+
+// Usage
+EmailSender email;
+SmsSender sms;
+NotificationService emailNotifier(email);
+NotificationService smsNotifier(sms);
+```
+
+> Injection choice mirrors ownership (Ch02): a **reference** (shown) when someone else owns the sender, **`std::unique_ptr<MessageSender>`** when the service should own it, or **`std::shared_ptr`** when it's shared.
 
 ### Key insight
 DIP is about **inverting the direction of dependency**. Instead of high-level code depending on low-level details, both depend on an interface that sits between them.

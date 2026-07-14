@@ -203,6 +203,40 @@ class Penguin implements Eater, Swimmer {
 }
 ```
 
+**C++** — same idea: implement capability interfaces and **hold** the behaviors as members:
+
+```cpp
+struct Eater   { virtual ~Eater()   = default; virtual void eat()  = 0; };
+struct Flyer   { virtual ~Flyer()   = default; virtual void fly()  = 0; };
+struct Swimmer { virtual ~Swimmer() = default; virtual void swim() = 0; };
+
+class DefaultEater : public Eater   { public: void eat()  override { std::cout << "Eating...\n"; } };
+class WingFlyer    : public Flyer   { public: void fly()  override { std::cout << "Flying with wings!\n"; } };
+class FinSwimmer   : public Swimmer { public: void swim() override { std::cout << "Swimming with fins!\n"; } };
+
+// Duck composes all three behaviors (has-a) instead of inheriting them
+class Duck : public Eater, public Flyer, public Swimmer {
+    DefaultEater eater;
+    WingFlyer flyer;
+    FinSwimmer swimmer;
+public:
+    void eat()  override { eater.eat(); }
+    void fly()  override { flyer.fly(); }
+    void swim() override { swimmer.swim(); }
+};
+
+// Penguin: eats and swims, but does NOT fly
+class Penguin : public Eater, public Swimmer {
+    DefaultEater eater;
+    FinSwimmer swimmer;
+public:
+    void eat()  override { eater.eat(); }
+    void swim() override { swimmer.swim(); }
+};
+```
+
+> Here the behaviors are **value members** (fixed at construction). To swap a behavior **at runtime**, hold it as `std::unique_ptr<Flyer>` instead and inject it — that's the Strategy pattern (Ch22), the runtime form of composition over inheritance.
+
 ### When to use Inheritance
 - True **is-a** relationship (a Dog IS-A Animal)
 - Shallow hierarchies (max 2-3 levels)
@@ -278,6 +312,22 @@ if (account.getBalance() > amount) {
 ```java
 // GOOD: Tell the object what to do
 account.withdraw(amount);  // Account decides if it's valid internally
+```
+
+**C++** — the object owns both the data and the decision:
+
+```cpp
+class Account {
+    double balance = 0.0;
+public:
+    void withdraw(double amount) {
+        if (amount > 0 && amount <= balance) balance -= amount;   // validated internally
+    }
+    double get_balance() const { return balance; }
+};
+
+// caller just tells it what to do:
+account.withdraw(amount);
 ```
 
 ### Connection to Encapsulation

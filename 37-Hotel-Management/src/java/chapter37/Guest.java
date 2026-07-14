@@ -1,0 +1,17 @@
+package chapter37;
+
+/**
+ * A guest who books rooms.
+ */
+public class Guest {
+    private final String id;
+    private final String name;
+
+    public Guest(String id, String name) {
+        this.id = id;
+        this.name = name;
+    }
+
+    public String getId() { return id; }
+    public String getName() { return name; }
+}

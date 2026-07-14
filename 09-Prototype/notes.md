@@ -200,6 +200,42 @@ class Circle extends Shape {
 }
 ```
 
+The **C++** idiom is a **virtual `clone()` returning `std::unique_ptr<Base>`** (a "virtual copy constructor"), delegating to the real copy constructor:
+
+```cpp
+struct Shape {
+    int x, y;
+    std::string color;
+    Shape(int x, int y, std::string color) : x(x), y(y), color(std::move(color)) {}
+    virtual ~Shape() = default;
+    virtual std::unique_ptr<Shape> clone() const = 0;   // polymorphic clone
+};
+
+class Circle : public Shape {
+    int radius;
+public:
+    Circle(int x, int y, std::string color, int radius)
+        : Shape(x, y, std::move(color)), radius(radius) {}
+
+    Circle(const Circle&) = default;    // member-wise copy (compiler-generated is fine here)
+
+    std::unique_ptr<Shape> clone() const override {
+        return std::make_unique<Circle>(*this);   // delegate to the copy constructor
+    }
+};
+
+// Clone through the base \u2014 no idea it's a Circle:
+std::unique_ptr<Shape> proto = std::make_unique<Circle>(0, 0, "red", 10);
+std::unique_ptr<Shape> copy  = proto->clone();
+```
+
+### C++ specifics
+
+- **`clone()` must be `virtual` and return `unique_ptr<Base>`** so you can copy through a base pointer without knowing the concrete type \u2014 the C++ answer to "clone without knowing the class."
+- **`clone()` delegates to the copy constructor** (`make_unique<Circle>(*this)`), which copies members for free.
+- **Surprise: C++'s default copy is *deeper* than Java's.** Value members like `std::string` and `std::vector` are **copied by value** (a real deep copy), whereas Java would share the reference. So for value-type members you often get a correct deep copy automatically.
+- **The danger is raw pointers / `shared_ptr` members.** The default copy duplicates the *pointer*, not the pointee (a shallow copy) \u2014 causing **double-free** (raw) or shared mutation (`shared_ptr`). Clone the pointee explicitly, and remember the **Rule of Three/Five** if you manage a raw resource.
+
 **Why copy constructor over Java's `Cloneable`?**
 - Java's `Cloneable` interface is broken by design (Effective Java, Item 13)
 - `Object.clone()` does shallow copy only

@@ -21,6 +21,14 @@ Menu menu = new LinuxMenu();            // ❌ Total chaos
 
 Every time you add a new platform, you edit multiple places. There's no guarantee of consistency.
 
+The **C++** version has the identical hazard:
+
+```cpp
+// BAD: nothing prevents mixing incompatible products
+std::unique_ptr<Button>   button   = std::make_unique<WindowsButton>();
+std::unique_ptr<Checkbox> checkbox = std::make_unique<MacCheckbox>();   // ❌ Windows + Mac = broken UI
+```
+
 ---
 
 ## Factory Method vs Abstract Factory
@@ -165,6 +173,38 @@ Checkbox checkbox = factory.createCheckbox(); // guaranteed Windows
 Menu menu = factory.createMenu();           // guaranteed Windows
 // Impossible to get a MacCheckbox from a WindowsFactory
 ```
+
+The **C++** factory is one pure-virtual method per product type; each concrete factory builds a whole family:
+
+```cpp
+// Abstract Factory — one factory method per product type
+struct UIFactory {
+    virtual ~UIFactory() = default;
+    virtual std::unique_ptr<Button>   createButton()   const = 0;
+    virtual std::unique_ptr<Checkbox> createCheckbox() const = 0;
+    virtual std::unique_ptr<Menu>     createMenu()     const = 0;
+};
+
+class WindowsFactory : public UIFactory {
+public:
+    std::unique_ptr<Button>   createButton()   const override { return std::make_unique<WindowsButton>(); }
+    std::unique_ptr<Checkbox> createCheckbox() const override { return std::make_unique<WindowsCheckbox>(); }
+    std::unique_ptr<Menu>     createMenu()     const override { return std::make_unique<WindowsMenu>(); }
+};
+
+// Client: pick the family ONCE, everything downstream is consistent
+std::unique_ptr<UIFactory> factory = std::make_unique<WindowsFactory>();
+auto button   = factory->createButton();     // guaranteed Windows
+auto checkbox = factory->createCheckbox();   // guaranteed Windows
+auto menu     = factory->createMenu();       // guaranteed Windows
+```
+
+### C++ specifics
+
+- **Every product base *and* `UIFactory` needs a `virtual` destructor** — all of them are deleted through base pointers.
+- **Each `create*` returns `std::unique_ptr<Product>`** — the factory creates and transfers ownership; no manual `delete`, no leaks.
+- **Own/store the chosen factory as `std::unique_ptr<UIFactory>`** — that's the variable that *holds* it and lets you **swap families at runtime** by reassigning it (e.g., Dark → Light theme); every later `create*` call follows the new family.
+- **Pass it to functions as `const UIFactory&`** — a borrowed reference, no ownership transfer. Never pass or store a `UIFactory` *by value*: it would slice (and it's abstract, so it can't be copied anyway). In short: **own with `unique_ptr`, borrow with `&`.**
 
 ---
 

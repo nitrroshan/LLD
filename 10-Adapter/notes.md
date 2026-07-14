@@ -61,6 +61,39 @@ class VlcAdapter implements MediaPlayer {
 
 Now client code only knows about `MediaPlayer` — it has no idea `VlcLibrary` exists.
 
+The **C++** object adapter wraps the adaptee by composition:
+
+```cpp
+// Target — the interface the client expects
+struct MediaPlayer {
+    virtual ~MediaPlayer() = default;
+    virtual void play(const std::string& filename) = 0;
+    virtual void stop() = 0;
+};
+
+// Adaptee — third-party class with an incompatible interface (can't change it)
+class VlcLibrary {
+public:
+    void vlc_play(const std::string& path, int volume) { /* ... */ }
+    void vlc_stop() { /* ... */ }
+};
+
+// Adapter — implements Target, HOLDS the Adaptee (object adapter / composition)
+class VlcAdapter : public MediaPlayer {
+    VlcLibrary vlc_;                                  // HAS-A the incompatible class
+public:
+    void play(const std::string& filename) override { vlc_.vlc_play(filename, 100); }  // translate
+    void stop() override { vlc_.vlc_stop(); }
+};
+```
+
+### C++ specifics
+
+- **Target is a pure-virtual base with a `virtual` destructor**; the client works with `MediaPlayer&` or `std::unique_ptr<MediaPlayer>`, never the concrete adapter.
+- **Object adapter = hold the adaptee.** Own it **by value** (as above) if the adapter's lifetime owns it; hold a **reference/pointer** if the adaptee is external or shared — don't copy something you don't own.
+- **C++ also supports the class adapter** via inheritance, and the idiomatic form is **`private` inheritance** (implemented-in-terms-of): `class VlcAdapter : public MediaPlayer, private VlcLibrary`. Still prefer the object adapter (composition over inheritance, Ch04).
+- No `implements`/`extends` keywords — a single `: public Target` gives you the Target contract.
+
 ---
 
 ## UML Class Diagram
